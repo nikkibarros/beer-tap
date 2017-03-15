@@ -1,87 +1,146 @@
 ﻿using System.Collections.Generic;
-using System.Data.Entity;
+using System.Data;
 using System.Data.Entity.Infrastructure;
+using System.Data.SqlClient;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BeerTapExercise2.Model;
+using Dapper;
 using IQ.Platform.Framework.WebApi;
 
 namespace BeerTapExercise2.ApiServices
 {
-    public class OfficeApiService : IOfficeApiService
-    {
-        BeerTapContext db = new BeerTapContext();
+	public class OfficeApiService : IOfficeApiService
+	{
+		private BeerTapContext _db;
+		private SqlConnection _sql;
 
-        public Task<Office> GetAsync(int id, IRequestContext context, CancellationToken cancellation)
-        {
-            var office = db.Offices.FindAsync(cancellation, id);
-            if (office == null)
-            {
-                throw context.CreateNotFoundHttpResponseException<Office>();
-            }
+		private const string BeerTapServiceConnectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=BeerTapService;Integrated Security=true";
+		private const string GetOfficesSp = "GetOffices";
+		private const string GetOfficeByIdSp = "GetOfficeById";
+		private const string UpdateOfficeSp = "UpdateOffice";
+		private const string DeleteOfficeSp = "DeleteOffice";
 
-            return office;
-        }
+		public OfficeApiService()
+		{
+			_db = new BeerTapContext();
+			_db.Database.Log = s => Debug.WriteLine(s);
 
-        public Task<IEnumerable<Office>> GetManyAsync(IRequestContext context, CancellationToken cancellation)
-        {
-            return Task.FromResult(db.Offices.AsEnumerable());
-        }
+			_sql = new SqlConnection(BeerTapServiceConnectionString);
+		}
 
-        public Task<ResourceCreationResult<Office, int>> CreateAsync(Office resource, IRequestContext context,
-            CancellationToken cancellation)
-        {
-            db.Offices.Add(resource);
-            db.SaveChangesAsync(cancellation);
+		private Office GetOffice(int id, IRequestContext context)
+		{
+			Office office;
+			using (_sql)
+			{
+				_sql.Open();
+				office = _sql.Query<Office>(GetOfficeByIdSp, new {Id = id}, commandType: CommandType.StoredProcedure).SingleOrDefault();
+			}
 
-            var result = new ResourceCreationResult<Office, int>(resource);
+			if (office == null)
+				throw context.CreateNotFoundHttpResponseException<Office>();
 
-            return Task.FromResult(result);
-        }
+			return office;
+		}
 
-        public Task<Office> UpdateAsync(Office resource, IRequestContext context, CancellationToken cancellation)
-        {
-            db.Entry(resource).State = EntityState.Modified;
+		private IEnumerable<Office> GetOffices()
+		{
+			IEnumerable<Office> offices;
+			using (_sql)
+			{
+				_sql.Open();
+				offices = _sql.Query<Office>(GetOfficesSp, commandType: CommandType.StoredProcedure);
+			}
+			return offices;
+		}
 
-            try
-            {
-                db.SaveChangesAsync(cancellation);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!OfficeExists(resource.Id))
-                {
-                    throw context.CreateNotFoundHttpResponseException<Office>();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		private void UpdateOffice(Office resource, IRequestContext context)
+		{
+			using (_sql)
+			{
+				_sql.Open();
+				try
+				{
+					_sql.Execute(UpdateOfficeSp, new {Id = resource.Id, Name = resource.Name}, commandType: CommandType.StoredProcedure);
+				}
+				catch (DbUpdateConcurrencyException)
+				{
+					if (!OfficeExists(resource.Id))
+						throw context.CreateNotFoundHttpResponseException<Office>();
 
-            return Task.FromResult(resource);
-        }
+					throw;
+				}
+			}
+		}
 
-        public Task DeleteAsync(ResourceOrIdentifier<Office, int> input, IRequestContext context,
-            CancellationToken cancellation)
-        {
-            return new Task(() =>
-            {
-                var office = input.HasResource ? input.Resource : db.Offices.Find(input.Id);
-                if (office == null)
-                {
-                    throw context.CreateNotFoundHttpResponseException<Office>();
-                }
+		private void DeleteOffice(int id)
+		{
+			using (_sql)
+			{
+				_sql.Open();
+				_sql.Execute(DeleteOfficeSp, new {Id = id}, commandType: CommandType.StoredProcedure);
+			}
+		}
 
-                db.Offices.Remove(office);
-                db.SaveChangesAsync(cancellation);
-            });
-        }
+		public Task<Office> GetAsync(int id, IRequestContext context, CancellationToken cancellation)
+		{
+			return Task.FromResult(GetOffice(id, context));
+		}
 
-        private bool OfficeExists(int id)
-        {
-            return db.Offices.Count(e => e.Id == id) > 0;
-        }
-    }
+		public Task<IEnumerable<Office>> GetManyAsync(IRequestContext context, CancellationToken cancellation)
+		{
+			return Task.FromResult(GetOffices());
+		}
+
+		public async Task<ResourceCreationResult<Office, int>> CreateAsync(Office resource, IRequestContext context,
+			CancellationToken cancellation)
+		{
+			/*using (_sql)
+	        {
+		        _sql.Open();
+				resource.Id=_sql.Query<int>(
+						@"
+                           insert Offices(Name)
+                           values (@OfficeName)
+select cast(scope_identity() as int)
+                        ", new {OfficeName=resource.Name}).SingleOrDefault();
+				
+	        }
+			
+			var result = new ResourceCreationResult<Office, int>(resource);
+	        return result;*/
+
+			_db.Offices.Add(resource);
+			await _db.SaveChangesAsync(cancellation);
+
+			var result = new ResourceCreationResult<Office, int>(resource);
+
+			return result;
+		}
+
+		public Task<Office> UpdateAsync(Office resource, IRequestContext context, CancellationToken cancellation)
+		{
+			UpdateOffice(resource, context);
+			return Task.FromResult(resource);
+		}
+
+		public Task DeleteAsync(ResourceOrIdentifier<Office, int> input, IRequestContext context,
+			CancellationToken cancellation)
+		{
+			var office = input.HasResource ? input.Resource : GetOffice(input.Id, context);
+			if (office == null)
+				throw context.CreateNotFoundHttpResponseException<Office>();
+
+			DeleteOffice(office.Id);
+			return Task.FromResult(input);
+		}
+
+		private bool OfficeExists(int id)
+		{
+			return GetOffices().Any(o => o.Id == id);
+		}
+	}
 }

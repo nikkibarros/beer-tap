@@ -18,13 +18,20 @@ namespace BeerTapExercise2.WebApi.Hypermedia
         {
             get
             {
-                return new SingleStateSpec<Office, int>()
-                {
-                    Links =
-                    {
-                        CreateLinkTemplate(LinkRelations.BeerTaps.AddTap, BeerTapSpec.Uri.Many, c => c.Id)
-                    }
-                };
+	            return new SingleStateSpec<Office, int>()
+	            {
+		            Links =
+		            {
+			            CreateLinkTemplate(LinkRelations.BeerTaps.AddTap, BeerTapSpec.Uri.Many, c => c.Id)
+		            },
+		            Operations =
+		            {
+			            Get = ServiceOperations.Get,
+			            Post = ServiceOperations.Update,
+			            Delete = ServiceOperations.Delete,
+			            InitialPost = ServiceOperations.Create
+		            }
+	            };
             }
         }
     }
