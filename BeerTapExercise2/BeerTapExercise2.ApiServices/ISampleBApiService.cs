@@ -10,5 +10,6 @@ namespace BeerTapExercise2.ApiServices
 		IUpdateAResourceAsync<SampleResource, string>,
 		IDeleteResourceAsync<SampleResource, string>
 	{
+		SampleResource Get(int id);
 	}
 }
