@@ -195,6 +195,7 @@
     <Compile Include="IPourGlassApiService.cs" />
     <Compile Include="IReplaceKegApiService.cs" />
     <Compile Include="ISampleApiService.cs" />
+    <Compile Include="ISampleBApiService.cs" />
     <Compile Include="LinksParametersSource.cs" />
     <Compile Include="OfficeApiService.cs" />
     <Compile Include="PourGlassApiService.cs" />
