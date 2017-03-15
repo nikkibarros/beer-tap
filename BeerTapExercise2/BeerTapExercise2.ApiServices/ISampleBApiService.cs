@@ -1,4 +1,5 @@
-﻿using BeerTapExercise2.Model;
+﻿using System.Collections.Generic;
+using BeerTapExercise2.Model;
 using IQ.Platform.Framework.WebApi;
 
 namespace BeerTapExercise2.ApiServices
@@ -11,5 +12,6 @@ namespace BeerTapExercise2.ApiServices
 		IDeleteResourceAsync<SampleResource, string>
 	{
 		SampleResource Get(int id);
+		IEnumerable<SampleResource> GetMany();
 	}
 }
